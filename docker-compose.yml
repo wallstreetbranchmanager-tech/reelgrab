@@ -1,0 +1,48 @@
+# ReelGrab — Docker Compose for NVIDIA DGX Spark (GB10 / ARM64, DGX OS)
+# Runs ReelGrab in its own isolated container with a persistent data volume.
+#
+# Default runs CPU-only (Ken Burns / ffmpeg) — perfect for the core product.
+# To enable local LTX GPU video on the Spark: set ADVANCED_CAMERA_PROVIDER=ltx,
+# point LTX_PATH/LTX_CKPT at your mounted LTX install, and uncomment the `gpus`
+# line (DGX OS uses CDI: `nvidia.com/gpu=all`).
+
+services:
+  reelgrab:
+    build: .
+    image: reelgrab:latest
+    container_name: reelgrab
+    restart: unless-stopped
+    ports:
+      - "${REELGRAB_PORT:-8000}:8000"
+    environment:
+      - REELGRAB_UPLOAD_DIR=/data/uploads
+      - REELGRAB_DB=/data/uploads/reelgrab.db
+      - REELGRAB_IP_SALT=${REELGRAB_IP_SALT:-change-me-in-env}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY:-}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET:-}
+      - STRIPE_PRICE_PRO_MONTHLY=${STRIPE_PRICE_PRO_MONTHLY:-}
+      - STRIPE_PRICE_CREDITS_10=${STRIPE_PRICE_CREDITS_10:-}
+      - STRIPE_PRICE_CREDITS_50=${STRIPE_PRICE_CREDITS_50:-}
+      - ADVANCED_CAMERA_PROVIDER=${ADVANCED_CAMERA_PROVIDER:-kenburns}
+      - LTX_PATH=${LTX_PATH:-}
+      - LTX_CKPT=${LTX_CKPT:-}
+    volumes:
+      - reelgrab_data:/data/uploads
+      # To use local LTX weights on the Spark, mount them read-only:
+      # - ${LTX_HOST_PATH:-/opt/LTX-Video}:/opt/ltx:ro
+
+    # --- GPU (only needed for local LTX inference on the Spark) ---
+    # DGX OS exposes the GB10 via CDI. Uncomment to grant GPU access:
+    # gpus: all
+    # Alternatively (older Compose): use `device_requests` or the CDI name
+    # `nvidia.com/gpu=all`.
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  reelgrab_data:
